@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseFrontmatter, formatContent, validatePost, calculateContentHash } from './publisher.js';
+import { parseFrontmatter, formatContent, validatePost, calculateContentHash, processPostFile } from './publisher.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -72,4 +72,11 @@ test('calculateContentHash gera SHA-256 consistente', () => {
   const hash2 = calculateContentHash(text);
   assert.strictEqual(hash1, hash2);
   assert.strictEqual(hash1.length, 64);
+});
+
+test('processPostFile executa com sucesso em modo dry-run', async () => {
+  const samplePath = path.join(PROJECT_ROOT, 'posts', 'queue', '2026-09-15-query-opt.md');
+  const res = await processPostFile(samplePath, { isDryRun: true });
+  assert.strictEqual(res.success, true);
+  assert.strictEqual(res.dryRun, true);
 });

@@ -87,3 +87,37 @@ npm run publish
 # ou
 node scripts/publisher.js posts/queue/2026-09-15-query-opt.md
 ```
+
+---
+
+## 🤖 Automação Básica (Fase 2: GitHub Actions)
+
+Com a Fase 2, o repositório conta com um pipeline automatizado em [`.github/workflows/publish.yml`](.github/workflows/publish.yml) que é engatilhado sempre que um post é adicionado ou alterado na pasta `posts/queue/` na branch `main`.
+
+### 1. Configuração dos Segredos no GitHub
+Para que a Action publique no seu perfil:
+1. No seu repositório no GitHub, vá em **Settings** > **Secrets and variables** > **Actions**.
+2. Clique em **New repository secret** e adicione:
+   - `LINKEDIN_ACCESS_TOKEN`: Seu token OAuth 2.0 gerado no LinkedIn Developer Portal.
+   - `LINKEDIN_AUTHOR_URN`: Seu URN de autor (ex: `urn:li:person:XXXXXXX` obtido via `npm run whoami`).
+   - `LINKEDIN_VERSION` *(opcional)*: Versão da API (padrão: `202608`).
+
+### 2. Fluxo de Publicação via Git
+1. Crie uma branch com seu post:
+   ```bash
+   git checkout -b post/meu-novo-artigo
+   # crie posts/queue/meu-post.md
+   git add posts/queue/meu-post.md
+   git commit -m "feat(post): add meu-post"
+   git push origin post/meu-novo-artigo
+   ```
+2. Abra um Pull Request para a branch `main`.
+3. Ao realizar o **Merge do PR na branch `main`**, a GitHub Action é disparada automaticamente:
+   - Executa os testes unitários (`npm test`).
+   - Processa os arquivos pendentes em `posts/queue/`.
+   - Publica o post no LinkedIn.
+
+### 3. Disparo Manual
+Você também pode disparar a publicação manualmente a qualquer momento pela interface do GitHub:
+- Vá na aba **Actions** > selecione **LinkedIn Content as Code — Publish Pipeline** > clique em **Run workflow**.
+

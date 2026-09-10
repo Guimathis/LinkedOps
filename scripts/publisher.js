@@ -245,6 +245,50 @@ export async function getProfileInfo() {
 }
 
 /**
+ * Processa um arquivo de post individual
+ */
+export async function processPostFile(filePath, { isDryRun = false } = {}) {
+  const resolvedPath = path.resolve(process.cwd(), filePath);
+  if (!fs.existsSync(resolvedPath)) {
+    throw new Error(`Arquivo não encontrado: ${resolvedPath}`);
+  }
+
+  console.log(`\n📄 Processando arquivo: ${path.relative(PROJECT_ROOT, resolvedPath)}`);
+  const rawContent = fs.readFileSync(resolvedPath, 'utf8');
+  const { metadata, body } = parseFrontmatter(rawContent);
+
+  const validation = validatePost(resolvedPath, metadata);
+  if (!validation.isValid) {
+    console.warn(`⚠️  [AVISO] ${validation.reason}`);
+    return { skipped: true, reason: validation.reason };
+  }
+
+  const formatted = formatContent(metadata, body);
+  const hash = calculateContentHash(formatted.commentary);
+
+  console.log(`📌 Título: "${formatted.title}"`);
+  console.log(`🔒 Visibilidade: ${formatted.visibility}`);
+  console.log(`📏 Contagem de caracteres: ${formatted.charCount} / 3.000`);
+  if (formatted.media) {
+    console.log(`🖼️  Mídia referenciada: ${formatted.media} (validada fisicamente)`);
+  }
+  console.log(`🔑 SHA-256: ${hash.slice(0, 16)}...`);
+
+  if (isDryRun) {
+    console.log('\n--- [MODO DRY-RUN: CONTEÚDO FINAL DO POST] ---');
+    console.log(formatted.commentary);
+    console.log('----------------------------------------------');
+    console.log('✅ Dry-run concluído com sucesso. Nenhuma requisição externa foi realizada.\n');
+    return { success: true, dryRun: true };
+  }
+
+  console.log('\n🚀 Publicando no LinkedIn...');
+  const result = await publishToLinkedIn(formatted);
+  console.log(`🎉 Sucesso! Post publicado com URN: ${result.postUrn}`);
+  return { success: true, postUrn: result.postUrn, metadata, formatted };
+}
+
+/**
  * Função principal CLI
  */
 async function main() {
@@ -271,67 +315,35 @@ async function main() {
 
   const targetFileArg = args.find(arg => !arg.startsWith('--'));
 
-  let filePath = targetFileArg;
-  if (!filePath) {
-    // Busca automática por arquivo na pasta queue
+  let targetFiles = [];
+  if (targetFileArg) {
+    targetFiles = [targetFileArg];
+  } else {
     const queueDir = path.join(PROJECT_ROOT, 'posts', 'queue');
     if (fs.existsSync(queueDir)) {
-      const files = fs.readdirSync(queueDir).filter(f => f.endsWith('.md'));
-      if (files.length > 0) {
-        filePath = path.join(queueDir, files[0]);
-      }
+      targetFiles = fs.readdirSync(queueDir)
+        .filter(f => f.endsWith('.md'))
+        .map(f => path.join(queueDir, f));
     }
   }
 
-  if (!filePath) {
-    console.log('Uso: node scripts/publisher.js [caminho/do/post.md] [--dry-run]');
-    console.log('Nenhum arquivo especificado e nenhum arquivo .md encontrado em posts/queue/.');
-    process.exitCode = 1;
+  if (targetFiles.length === 0) {
+    console.log('ℹ️  Nenhum post pendente encontrado para processar.');
     return;
   }
 
-  const resolvedPath = path.resolve(process.cwd(), filePath);
-  if (!fs.existsSync(resolvedPath)) {
-    console.error(`[ERRO] Arquivo não encontrado: ${resolvedPath}`);
-    process.exitCode = 1;
-    return;
+  console.log(`🎯 Encontrado(s) ${targetFiles.length} arquivo(s) para processamento.`);
+  let hasErrors = false;
+  for (const file of targetFiles) {
+    try {
+      await processPostFile(file, { isDryRun });
+    } catch (err) {
+      console.error(`❌ [ERRO AO PROCESSAR ${path.basename(file)}] ${err.message}`);
+      hasErrors = true;
+    }
   }
 
-  console.log(`\n📄 Processando arquivo: ${path.relative(PROJECT_ROOT, resolvedPath)}`);
-  const rawContent = fs.readFileSync(resolvedPath, 'utf8');
-  const { metadata, body } = parseFrontmatter(rawContent);
-
-  const validation = validatePost(resolvedPath, metadata);
-  if (!validation.isValid) {
-    console.warn(`⚠️  [AVISO] ${validation.reason}`);
-    return;
-  }
-
-  const formatted = formatContent(metadata, body);
-  const hash = calculateContentHash(formatted.commentary);
-
-  console.log(`📌 Título: "${formatted.title}"`);
-  console.log(`🔒 Visibilidade: ${formatted.visibility}`);
-  console.log(`📏 Contagem de caracteres: ${formatted.charCount} / 3.000`);
-  if (formatted.media) {
-    console.log(`🖼️  Mídia referenciada: ${formatted.media} (validada fisicamente)`);
-  }
-  console.log(`🔑 SHA-256: ${hash.slice(0, 16)}...`);
-
-  if (isDryRun) {
-    console.log('\n--- [MODO DRY-RUN: CONTEÚDO FINAL DO POST] ---');
-    console.log(formatted.commentary);
-    console.log('----------------------------------------------');
-    console.log('✅ Dry-run concluído com sucesso. Nenhuma requisição externa foi realizada.\n');
-    return;
-  }
-
-  console.log('\n🚀 Publicando no LinkedIn...');
-  try {
-    const result = await publishToLinkedIn(formatted);
-    console.log(`🎉 Sucesso! Post publicado com URN: ${result.postUrn}`);
-  } catch (err) {
-    console.error(`❌ [ERRO AO PUBLICAR] ${err.message}`);
+  if (hasErrors) {
     process.exitCode = 1;
   }
 }

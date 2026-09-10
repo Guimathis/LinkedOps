@@ -189,6 +189,44 @@ def get_profile_info():
     with urllib.request.urlopen(req) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
+def process_post_file(file_path: Path, is_dry_run: bool = False):
+    """Processa um arquivo individual de post."""
+    resolved_path = file_path.resolve()
+    if not resolved_path.exists():
+        raise FileNotFoundError(f"Arquivo não encontrado: {resolved_path}")
+
+    print(f"\n📄 Processando arquivo: {resolved_path.relative_to(PROJECT_ROOT)}")
+    with open(resolved_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    metadata, body = parse_frontmatter(content)
+    is_valid, reason = validate_post(resolved_path, metadata)
+    if not is_valid:
+        print(f"⚠️  [AVISO] {reason}")
+        return {"skipped": True, "reason": reason}
+
+    formatted = format_content(metadata, body)
+    content_hash = calculate_content_hash(formatted["commentary"])
+
+    print(f"📌 Título: \"{formatted['title']}\"")
+    print(f"🔒 Visibilidade: {formatted['visibility']}")
+    print(f"📏 Contagem de caracteres: {formatted['char_count']} / 3.000")
+    if formatted["media"]:
+        print(f"🖼️  Mídia referenciada: {formatted['media']} (validada fisicamente)")
+    print(f"🔑 SHA-256: {content_hash[:16]}...")
+
+    if is_dry_run:
+        print("\n--- [MODO DRY-RUN: CONTEÚDO FINAL DO POST] ---")
+        print(formatted["commentary"])
+        print("----------------------------------------------")
+        print("✅ Dry-run concluído com sucesso. Nenhuma requisição externa foi realizada.\n")
+        return {"success": True, "dry_run": True}
+
+    print("\n🚀 Publicando no LinkedIn...")
+    urn = publish_to_linkedin(formatted)
+    print(f"🎉 Sucesso! Post publicado com URN: {urn}")
+    return {"success": True, "urn": urn}
+
 def main():
     parser = argparse.ArgumentParser(description="LinkedIn Content as Code Publisher")
     parser.add_argument("file", nargs="?", help="Caminho do arquivo Markdown a ser publicado")
@@ -213,57 +251,28 @@ def main():
             print(f"❌ [ERRO AO CONSULTAR PERFIL] {exc}", file=sys.stderr)
             sys.exit(1)
 
-    target_file = args.file
-    if not target_file:
+    target_files = []
+    if args.file:
+        target_files = [Path(args.file)]
+    else:
         queue_dir = PROJECT_ROOT / "posts" / "queue"
         if queue_dir.exists():
-            candidates = sorted(list(queue_dir.glob("*.md")))
-            if candidates:
-                target_file = str(candidates[0])
+            target_files = sorted(list(queue_dir.glob("*.md")))
 
-    if not target_file:
-        print("Uso: python scripts/publisher.py [caminho/do/post.md] [--dry-run]")
-        print("Nenhum arquivo especificado e nenhum arquivo .md encontrado em posts/queue/.")
-        sys.exit(1)
+    if not target_files:
+        print("ℹ️  Nenhum post pendente encontrado para processar.")
+        return
 
-    file_path = Path(target_file).resolve()
-    if not file_path.exists():
-        print(f"[ERRO] Arquivo não encontrado: {file_path}", file=sys.stderr)
-        sys.exit(1)
+    print(f"🎯 Encontrado(s) {len(target_files)} arquivo(s) para processamento.")
+    has_errors = False
+    for fpath in target_files:
+        try:
+            process_post_file(fpath, is_dry_run=args.dry_run)
+        except Exception as exc:
+            print(f"❌ [ERRO AO PROCESSAR {fpath.name}] {exc}", file=sys.stderr)
+            has_errors = True
 
-    print(f"\n📄 Processando arquivo: {file_path.relative_to(PROJECT_ROOT)}")
-    with open(file_path, "r", encoding="utf-8") as f:
-        content = f.read()
-
-    metadata, body = parse_frontmatter(content)
-    is_valid, reason = validate_post(file_path, metadata)
-    if not is_valid:
-        print(f"⚠️  [AVISO] {reason}")
-        sys.exit(0)
-
-    formatted = format_content(metadata, body)
-    content_hash = calculate_content_hash(formatted["commentary"])
-
-    print(f"📌 Título: \"{formatted['title']}\"")
-    print(f"🔒 Visibilidade: {formatted['visibility']}")
-    print(f"📏 Contagem de caracteres: {formatted['char_count']} / 3.000")
-    if formatted["media"]:
-        print(f"🖼️  Mídia referenciada: {formatted['media']} (validada fisicamente)")
-    print(f"🔑 SHA-256: {content_hash[:16]}...")
-
-    if args.dry_run:
-        print("\n--- [MODO DRY-RUN: CONTEÚDO FINAL DO POST] ---")
-        print(formatted["commentary"])
-        print("----------------------------------------------")
-        print("✅ Dry-run concluído com sucesso. Nenhuma requisição externa foi realizada.\n")
-        sys.exit(0)
-
-    print("\n🚀 Publicando no LinkedIn...")
-    try:
-        urn = publish_to_linkedin(formatted)
-        print(f"🎉 Sucesso! Post publicado com URN: {urn}")
-    except Exception as exc:
-        print(f"❌ [ERRO AO PUBLICAR] {exc}", file=sys.stderr)
+    if has_errors:
         sys.exit(1)
 
 if __name__ == "__main__":
