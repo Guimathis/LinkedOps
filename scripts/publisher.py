@@ -176,11 +176,42 @@ def publish_to_linkedin(formatted: dict):
         body = err.read().decode("utf-8")
         raise RuntimeError(f"Erro na API do LinkedIn [HTTP {err.code}]: {body}")
 
+def get_profile_info():
+    """Consulta dados da conta associada ao LINKEDIN_ACCESS_TOKEN."""
+    token = os.environ.get("LINKEDIN_ACCESS_TOKEN")
+    if not token:
+        raise RuntimeError("Variável LINKEDIN_ACCESS_TOKEN não configurada no .env.")
+
+    req = urllib.request.Request(
+        "https://api.linkedin.com/v2/userinfo",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
 def main():
     parser = argparse.ArgumentParser(description="LinkedIn Content as Code Publisher")
     parser.add_argument("file", nargs="?", help="Caminho do arquivo Markdown a ser publicado")
     parser.add_argument("--dry-run", action="store_true", help="Simula o processamento sem disparar a API")
+    parser.add_argument("--whoami", action="store_true", help="Inspeciona o token e exibe o ID de autor (sub)")
     args = parser.parse_args()
+
+    if args.whoami:
+        print("\n🔍 Consultando perfil associado ao LINKEDIN_ACCESS_TOKEN...")
+        try:
+            info = get_profile_info()
+            name = info.get("name") or f"{info.get('given_name', '')} {info.get('family_name', '')}".strip()
+            print(f"👤 Nome: {name}")
+            if "email" in info:
+                print(f"📧 Email: {info['email']}")
+            print(f"🆔 ID de Usuário (sub): {info['sub']}")
+            print("\n💡 Dica de configuração:")
+            print(f"Para postar no seu Perfil Pessoal, configure no .env:")
+            print(f'LINKEDIN_AUTHOR_URN="urn:li:person:{info["sub"]}"\n')
+            return
+        except Exception as exc:
+            print(f"❌ [ERRO AO CONSULTAR PERFIL] {exc}", file=sys.stderr)
+            sys.exit(1)
 
     target_file = args.file
     if not target_file:

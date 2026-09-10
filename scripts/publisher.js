@@ -225,11 +225,50 @@ export async function publishToLinkedIn({ commentary, visibility }) {
 }
 
 /**
+ * Consulta informações do usuário autenticado (OAuth OpenID/userinfo)
+ */
+export async function getProfileInfo() {
+  const token = process.env.LINKEDIN_ACCESS_TOKEN;
+  if (!token) {
+    throw new Error('Variável LINKEDIN_ACCESS_TOKEN não configurada no arquivo .env.');
+  }
+  const response = await fetch('https://api.linkedin.com/v2/userinfo', {
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Falha ao consultar perfil [HTTP ${response.status}]: ${text}`);
+  }
+  return await response.json();
+}
+
+/**
  * Função principal CLI
  */
 async function main() {
   const args = process.argv.slice(2);
   const isDryRun = args.includes('--dry-run');
+
+  if (args.includes('--whoami')) {
+    console.log('\n🔍 Consultando perfil associado ao LINKEDIN_ACCESS_TOKEN...');
+    try {
+      const info = await getProfileInfo();
+      console.log(`👤 Nome: ${info.name || `${info.given_name} ${info.family_name}`}`);
+      if (info.email) console.log(`📧 Email: ${info.email}`);
+      console.log(`🆔 ID de Usuário (sub): ${info.sub}`);
+      console.log(`\n💡 Dica de configuração:`);
+      console.log(`Para postar no seu Perfil Pessoal, configure no .env:`);
+      console.log(`LINKEDIN_AUTHOR_URN="urn:li:person:${info.sub}"\n`);
+      return;
+    } catch (err) {
+      console.error(`❌ [ERRO AO CONSULTAR PERFIL] ${err.message}`);
+      process.exitCode = 1;
+      return;
+    }
+  }
+
   const targetFileArg = args.find(arg => !arg.startsWith('--'));
 
   let filePath = targetFileArg;

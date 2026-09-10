@@ -6,6 +6,7 @@
   "scripts": {
     "dry-run": "node scripts/publisher.js --dry-run",
     "publish": "node scripts/publisher.js",
+    "whoami": "node scripts/publisher.js --whoami",
     "test": "node --test scripts/publisher.test.js"
   },
   "keywords": [
