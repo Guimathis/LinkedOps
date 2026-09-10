@@ -142,6 +142,7 @@ def publish_to_linkedin(formatted: dict):
         raise RuntimeError("Variáveis LINKEDIN_ACCESS_TOKEN e/ou LINKEDIN_AUTHOR_URN não configuradas.")
 
     endpoint = "https://api.linkedin.com/rest/posts"
+    api_version = os.environ.get("LINKEDIN_VERSION", "202608")
     payload = {
         "author": author_urn,
         "commentary": formatted["commentary"],
@@ -160,7 +161,7 @@ def publish_to_linkedin(formatted: dict):
         data=json.dumps(payload).encode("utf-8"),
         headers={
             "Authorization": f"Bearer {token}",
-            "LinkedIn-Version": "202401",
+            "LinkedIn-Version": api_version,
             "X-Restli-Protocol-Version": "2.0.0",
             "Content-Type": "application/json"
         },

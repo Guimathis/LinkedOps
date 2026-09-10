@@ -184,6 +184,7 @@ export function calculateContentHash(content) {
 export async function publishToLinkedIn({ commentary, visibility }) {
   const token = process.env.LINKEDIN_ACCESS_TOKEN;
   const authorUrn = process.env.LINKEDIN_AUTHOR_URN;
+  const apiVersion = process.env.LINKEDIN_VERSION || '202608';
 
   if (!token || !authorUrn) {
     throw new Error('Variáveis de ambiente LINKEDIN_ACCESS_TOKEN e/ou LINKEDIN_AUTHOR_URN não configuradas.');
@@ -207,7 +208,7 @@ export async function publishToLinkedIn({ commentary, visibility }) {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
-      'LinkedIn-Version': '202401',
+      'LinkedIn-Version': apiVersion,
       'X-Restli-Protocol-Version': '2.0.0',
       'Content-Type': 'application/json'
     },
@@ -246,13 +247,15 @@ async function main() {
   if (!filePath) {
     console.log('Uso: node scripts/publisher.js [caminho/do/post.md] [--dry-run]');
     console.log('Nenhum arquivo especificado e nenhum arquivo .md encontrado em posts/queue/.');
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 
   const resolvedPath = path.resolve(process.cwd(), filePath);
   if (!fs.existsSync(resolvedPath)) {
     console.error(`[ERRO] Arquivo não encontrado: ${resolvedPath}`);
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 
   console.log(`\n📄 Processando arquivo: ${path.relative(PROJECT_ROOT, resolvedPath)}`);
@@ -262,7 +265,7 @@ async function main() {
   const validation = validatePost(resolvedPath, metadata);
   if (!validation.isValid) {
     console.warn(`⚠️  [AVISO] ${validation.reason}`);
-    process.exit(0);
+    return;
   }
 
   const formatted = formatContent(metadata, body);
@@ -281,7 +284,7 @@ async function main() {
     console.log(formatted.commentary);
     console.log('----------------------------------------------');
     console.log('✅ Dry-run concluído com sucesso. Nenhuma requisição externa foi realizada.\n');
-    process.exit(0);
+    return;
   }
 
   console.log('\n🚀 Publicando no LinkedIn...');
@@ -290,13 +293,13 @@ async function main() {
     console.log(`🎉 Sucesso! Post publicado com URN: ${result.postUrn}`);
   } catch (err) {
     console.error(`❌ [ERRO AO PUBLICAR] ${err.message}`);
-    process.exit(1);
+    process.exitCode = 1;
   }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   main().catch(err => {
     console.error(`❌ Erro fatal: ${err.message}`);
-    process.exit(1);
+    process.exitCode = 1;
   });
 }
