@@ -1,0 +1,19 @@
+{
+  "name": "git-linkedin-posts",
+  "version": "0.1.0",
+  "description": "Content as Code (GitOps) para automação de publicações no LinkedIn via Git",
+  "type": "module",
+  "scripts": {
+    "dry-run": "node scripts/publisher.js --dry-run",
+    "publish": "node scripts/publisher.js",
+    "test": "node --test scripts/publisher.test.js"
+  },
+  "keywords": [
+    "linkedin",
+    "content-as-code",
+    "gitops",
+    "automation"
+  ],
+  "author": "Guima",
+  "license": "MIT"
+}
