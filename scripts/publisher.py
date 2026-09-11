@@ -216,13 +216,111 @@ def calculate_content_hash(text: str) -> str:
     """Gera hash SHA-256 do texto normalizado."""
     return hashlib.sha256(text.strip().encode("utf-8")).hexdigest()
 
+def get_mime_type(file_path: Path) -> str:
+    """Retorna o Content-Type apropriado de acordo com a extensão do arquivo."""
+    ext = file_path.suffix.lower()
+    mapping = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+        ".pdf": "application/pdf"
+    }
+    return mapping.get(ext, "application/octet-stream")
+
+def upload_media_to_linkedin(media_relative_path: str) -> dict:
+    """Realiza o upload de mídia em 2 etapas (imagens e documentos PDF)."""
+    token = os.environ.get("LINKEDIN_ACCESS_TOKEN")
+    author_urn = os.environ.get("LINKEDIN_AUTHOR_URN")
+    api_version = os.environ.get("LINKEDIN_VERSION", "202608")
+
+    if not token or not author_urn:
+        raise RuntimeError("Variáveis LINKEDIN_ACCESS_TOKEN e/ou LINKEDIN_AUTHOR_URN não configuradas.")
+
+    full_path = (PROJECT_ROOT / media_relative_path).resolve()
+    if not full_path.exists():
+        raise FileNotFoundError(f"Arquivo de mídia não encontrado: {full_path}")
+
+    mime_type = get_mime_type(full_path)
+    is_document = mime_type == "application/pdf"
+    resource_type = "documents" if is_document else "images"
+    init_endpoint = f"https://api.linkedin.com/rest/{resource_type}?action=initializeUpload"
+
+    label = "Documento PDF / Carrossel" if is_document else "Imagem"
+    print(f"📤 Inicializando upload de mídia ({label})...")
+
+    init_payload = {
+        "initializeUploadRequest": {
+            "owner": author_urn
+        }
+    }
+
+    req_init = urllib.request.Request(
+        init_endpoint,
+        data=json.dumps(init_payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {token}",
+            "LinkedIn-Version": api_version,
+            "X-Restli-Protocol-Version": "2.0.0",
+            "Content-Type": "application/json"
+        },
+        method="POST"
+    )
+
+    try:
+        with urllib.request.urlopen(req_init) as resp:
+            init_data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as err:
+        body = err.read().decode("utf-8")
+        raise RuntimeError(f"Falha na inicialização do upload de mídia [HTTP {err.code}]: {body}")
+
+    val = init_data.get("value", {})
+    upload_url = val.get("uploadUrl")
+    media_urn = val.get("document") if is_document else val.get("image")
+
+    if not upload_url or not media_urn:
+        raise RuntimeError(f"Resposta de inicialização inválida do LinkedIn: {init_data}")
+
+    size_kb = full_path.stat().st_size / 1024
+    print(f"⬆️  Enviando arquivo binário ({size_kb:.1f} KB)...")
+
+    with open(full_path, "rb") as f:
+        file_bytes = f.read()
+
+    req_upload = urllib.request.Request(
+        upload_url,
+        data=file_bytes,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": mime_type
+        },
+        method="PUT"
+    )
+
+    try:
+        with urllib.request.urlopen(req_upload) as resp:
+            pass
+    except urllib.error.HTTPError as err:
+        body = err.read().decode("utf-8")
+        raise RuntimeError(f"Falha no upload binário da mídia [HTTP {err.code}]: {body}")
+
+    print(f"✅ Upload concluído! URN da mídia: {media_urn}")
+    return {"media_urn": media_urn, "is_document": is_document, "mime_type": mime_type}
+
 def publish_to_linkedin(formatted: dict):
-    """Dispara a publicação via LinkedIn REST API."""
+    """Dispara a publicação via LinkedIn REST API com suporte a imagens e PDF."""
     token = os.environ.get("LINKEDIN_ACCESS_TOKEN")
     author_urn = os.environ.get("LINKEDIN_AUTHOR_URN")
 
     if not token or not author_urn:
         raise RuntimeError("Variáveis LINKEDIN_ACCESS_TOKEN e/ou LINKEDIN_AUTHOR_URN não configuradas.")
+
+    media_urn = None
+    media = formatted.get("media")
+    if media:
+        media_info = upload_media_to_linkedin(media)
+        media_urn = media_info["media_urn"]
 
     endpoint = "https://api.linkedin.com/rest/posts"
     api_version = os.environ.get("LINKEDIN_VERSION", "202608")
@@ -238,6 +336,14 @@ def publish_to_linkedin(formatted: dict):
         "lifecycleState": "PUBLISHED",
         "isReshareDisabledByAuthor": False
     }
+
+    if media_urn:
+        payload["content"] = {
+            "media": {
+                "title": formatted.get("title", "Post Media"),
+                "id": media_urn
+            }
+        }
 
     req = urllib.request.Request(
         endpoint,
@@ -295,12 +401,25 @@ def process_post_file(file_path: Path, is_dry_run: bool = False):
     print(f"🔒 Visibilidade: {formatted['visibility']}")
     print(f"📏 Contagem de caracteres: {formatted['char_count']} / 3.000")
     if formatted["media"]:
-        print(f"🖼️  Mídia referenciada: {formatted['media']} (validada fisicamente)")
+        media_full_path = (PROJECT_ROOT / formatted["media"]).resolve()
+        mime = get_mime_type(media_full_path)
+        is_doc = mime == "application/pdf"
+        size_kb = media_full_path.stat().st_size / 1024
+        print(f"🖼️  Mídia: {formatted['media']} ({mime}, {size_kb:.1f} KB)")
+        label = "Documento / Carrossel PDF (/rest/documents)" if is_doc else "Imagem (/rest/images)"
+        print(f"    Tipo LinkedIn: {label}")
     print(f"🔑 SHA-256: {content_hash[:16]}...")
 
     if is_dry_run:
         print("\n--- [MODO DRY-RUN: CONTEÚDO FINAL DO POST] ---")
         print(formatted["commentary"])
+        if formatted["media"]:
+            media_full_path = (PROJECT_ROOT / formatted["media"]).resolve()
+            mime = get_mime_type(media_full_path)
+            mock_urn = "urn:li:document:MOCK_SIMULATED_DOC" if mime == "application/pdf" else "urn:li:image:MOCK_SIMULATED_IMAGE"
+            print("\n📎 [SIMULAÇÃO DE ANEXO DE MÍDIA]")
+            print(f'   - Título do Anexo: "{formatted["title"]}"')
+            print(f'   - ID Simulado: "{mock_urn}"')
         print("----------------------------------------------")
         print("✅ Dry-run concluído com sucesso. Nenhuma requisição externa foi realizada.\n")
         return {"success": True, "dry_run": True}

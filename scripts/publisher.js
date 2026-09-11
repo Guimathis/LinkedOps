@@ -282,15 +282,116 @@ export function calculateContentHash(content) {
 }
 
 /**
- * Publica post via LinkedIn REST API
+ * Identifica o MIME Type a partir da extensão do arquivo
  */
-export async function publishToLinkedIn({ commentary, visibility }) {
+export function getMimeType(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  switch (ext) {
+    case '.png': return 'image/png';
+    case '.jpg':
+    case '.jpeg': return 'image/jpeg';
+    case '.gif': return 'image/gif';
+    case '.webp': return 'image/webp';
+    case '.pdf': return 'application/pdf';
+    default: return 'application/octet-stream';
+  }
+}
+
+/**
+ * Realiza o upload de mídia em 2 etapas para a API do LinkedIn:
+ * - Imagens (.png, .jpg, .webp, .gif) -> /rest/images
+ * - Documentos / Carrossel (.pdf) -> /rest/documents
+ */
+export async function uploadMediaToLinkedIn(mediaRelativePath) {
   const token = process.env.LINKEDIN_ACCESS_TOKEN;
   const authorUrn = process.env.LINKEDIN_AUTHOR_URN;
   const apiVersion = process.env.LINKEDIN_VERSION || '202608';
 
   if (!token || !authorUrn) {
     throw new Error('Variáveis de ambiente LINKEDIN_ACCESS_TOKEN e/ou LINKEDIN_AUTHOR_URN não configuradas.');
+  }
+
+  const fullPath = path.resolve(PROJECT_ROOT, mediaRelativePath);
+  if (!fs.existsSync(fullPath)) {
+    throw new Error(`Arquivo de mídia não encontrado no caminho: ${fullPath}`);
+  }
+
+  const mimeType = getMimeType(fullPath);
+  const isDocument = mimeType === 'application/pdf';
+  const resourceType = isDocument ? 'documents' : 'images';
+  const initEndpoint = `https://api.linkedin.com/rest/${resourceType}?action=initializeUpload`;
+
+  console.log(`📤 Inicializando upload de mídia (${isDocument ? 'Documento PDF / Carrossel' : 'Imagem'})...`);
+
+  // Etapa 1: Inicialização do upload
+  const initResponse = await fetch(initEndpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'LinkedIn-Version': apiVersion,
+      'X-Restli-Protocol-Version': '2.0.0',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      initializeUploadRequest: {
+        owner: authorUrn
+      }
+    })
+  });
+
+  if (!initResponse.ok) {
+    const errorText = await initResponse.text();
+    throw new Error(`Falha na inicialização do upload de mídia [HTTP ${initResponse.status}]: ${errorText}`);
+  }
+
+  const initData = await initResponse.json();
+  const uploadUrl = initData?.value?.uploadUrl;
+  const mediaUrn = isDocument ? initData?.value?.document : initData?.value?.image;
+
+  if (!uploadUrl || !mediaUrn) {
+    throw new Error(`Resposta de inicialização inválida do LinkedIn: ${JSON.stringify(initData)}`);
+  }
+
+  const fileStats = fs.statSync(fullPath);
+  console.log(`⬆️  Enviando arquivo binário (${(fileStats.size / 1024).toFixed(1)} KB)...`);
+
+  // Etapa 2: Upload binário para o uploadUrl fornecido
+  const fileBuffer = fs.readFileSync(fullPath);
+  const uploadResponse = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': mimeType
+    },
+    body: fileBuffer
+  });
+
+  if (!uploadResponse.ok) {
+    const uploadError = await uploadResponse.text();
+    throw new Error(`Falha no upload binário da mídia [HTTP ${uploadResponse.status}]: ${uploadError}`);
+  }
+
+  console.log(`✅ Upload concluído! URN da mídia: ${mediaUrn}`);
+  return { mediaUrn, isDocument, mimeType };
+}
+
+/**
+ * Publica post via LinkedIn REST API (com suporte a texto puro, imagens e documentos PDF)
+ */
+export async function publishToLinkedIn({ title, commentary, visibility, media = null }) {
+  const token = process.env.LINKEDIN_ACCESS_TOKEN;
+  const authorUrn = process.env.LINKEDIN_AUTHOR_URN;
+  const apiVersion = process.env.LINKEDIN_VERSION || '202608';
+
+  if (!token || !authorUrn) {
+    throw new Error('Variáveis de ambiente LINKEDIN_ACCESS_TOKEN e/ou LINKEDIN_AUTHOR_URN não configuradas.');
+  }
+
+  // Upload de mídia prévio se houver
+  let mediaUrn = null;
+  if (media) {
+    const uploadResult = await uploadMediaToLinkedIn(media);
+    mediaUrn = uploadResult.mediaUrn;
   }
 
   const endpoint = 'https://api.linkedin.com/rest/posts';
@@ -307,6 +408,15 @@ export async function publishToLinkedIn({ commentary, visibility }) {
     isReshareDisabledByAuthor: false
   };
 
+  if (mediaUrn) {
+    payload.content = {
+      media: {
+        title: title || 'Post Media',
+        id: mediaUrn
+      }
+    };
+  }
+
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
@@ -320,7 +430,7 @@ export async function publishToLinkedIn({ commentary, visibility }) {
 
   if (response.status === 201) {
     const postUrn = response.headers.get('x-restli-id') || response.headers.get('x-linkedin-id') || 'URN_CREATED';
-    return { success: true, postUrn, status: response.status };
+    return { success: true, postUrn, status: response.status, mediaUrn };
   } else {
     const errorText = await response.text();
     throw new Error(`Falha na chamada da API do LinkedIn [HTTP ${response.status}]: ${errorText}`);
@@ -373,13 +483,25 @@ export async function processPostFile(filePath, { isDryRun = false } = {}) {
   console.log(`🔒 Visibilidade: ${formatted.visibility}`);
   console.log(`📏 Contagem de caracteres: ${formatted.charCount} / 3.000`);
   if (formatted.media) {
-    console.log(`🖼️  Mídia referenciada: ${formatted.media} (validada fisicamente)`);
+    const mediaFullPath = path.resolve(PROJECT_ROOT, formatted.media);
+    const mime = getMimeType(mediaFullPath);
+    const isDoc = mime === 'application/pdf';
+    const sizeKb = (fs.statSync(mediaFullPath).size / 1024).toFixed(1);
+    console.log(`🖼️  Mídia: ${formatted.media} (${mime}, ${sizeKb} KB)`);
+    console.log(`    Tipo LinkedIn: ${isDoc ? 'Documento / Carrossel PDF (/rest/documents)' : 'Imagem (/rest/images)'}`);
   }
   console.log(`🔑 SHA-256: ${hash.slice(0, 16)}...`);
 
   if (isDryRun) {
     console.log('\n--- [MODO DRY-RUN: CONTEÚDO FINAL DO POST] ---');
     console.log(formatted.commentary);
+    if (formatted.media) {
+      const mime = getMimeType(path.resolve(PROJECT_ROOT, formatted.media));
+      const mockUrn = mime === 'application/pdf' ? 'urn:li:document:MOCK_SIMULATED_DOC' : 'urn:li:image:MOCK_SIMULATED_IMAGE';
+      console.log('\n📎 [SIMULAÇÃO DE ANEXO DE MÍDIA]');
+      console.log(`   - Título do Anexo: "${formatted.title}"`);
+      console.log(`   - ID Simulado: "${mockUrn}"`);
+    }
     console.log('----------------------------------------------');
     console.log('✅ Dry-run concluído com sucesso. Nenhuma requisição externa foi realizada.\n');
     return { success: true, dryRun: true };

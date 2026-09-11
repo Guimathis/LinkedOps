@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseFrontmatter, formatContent, validatePost, calculateContentHash, processPostFile, injectFrontmatterMetadata } from './publisher.js';
+import { parseFrontmatter, formatContent, validatePost, calculateContentHash, processPostFile, injectFrontmatterMetadata, getMimeType } from './publisher.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -99,4 +99,21 @@ Corpo do artigo aqui.`;
   assert.ok(enriched.includes('linkedin_post_urn: "urn:li:share:987654321"'));
   assert.ok(enriched.includes('Corpo do artigo aqui.'));
   assert.ok(enriched.startsWith('---\n'));
+});
+
+test('getMimeType identifica tipos MIME de imagens e PDFs corretamente', () => {
+  assert.strictEqual(getMimeType('foto.png'), 'image/png');
+  assert.strictEqual(getMimeType('foto.jpg'), 'image/jpeg');
+  assert.strictEqual(getMimeType('foto.jpeg'), 'image/jpeg');
+  assert.strictEqual(getMimeType('animacao.gif'), 'image/gif');
+  assert.strictEqual(getMimeType('banner.webp'), 'image/webp');
+  assert.strictEqual(getMimeType('documento.pdf'), 'application/pdf');
+  assert.strictEqual(getMimeType('arquivo.desconhecido'), 'application/octet-stream');
+});
+
+test('processPostFile com mídia em PDF executa dry-run com anexo simulado', async () => {
+  const samplePdfPost = path.join(PROJECT_ROOT, 'posts', 'drafts', '2026-09-exemplo-carrossel.md');
+  const res = await processPostFile(samplePdfPost, { isDryRun: true });
+  assert.strictEqual(res.success, true);
+  assert.strictEqual(res.dryRun, true);
 });

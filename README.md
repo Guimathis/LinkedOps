@@ -145,4 +145,42 @@ Na Fase 3, o pipeline atua de forma totalmente autônoma para gerenciar o estado
 - **Nível 1 (Arquivo):** Se um arquivo já possuir `linkedin_post_urn`, o pipeline ignora a publicação e registra um aviso.
 - **Nível 2 (Histórico):** Se o hash SHA-256 do texto já constar em `history.json`, o pipeline aborta a publicação para evitar duplicatas, mesmo que o arquivo seja renomeado.
 
+---
+
+## 🎨 Mídia Avançada: Imagens & Carrosséis em PDF (Fase 4)
+
+Com a Fase 4, o **LinkedOps** realiza o upload automatizado em 2 etapas para qualquer asset de mídia referenciado no campo `media:` do Frontmatter:
+
+### 1. Suporte a Imagens
+- **Formatos suportados:** `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`.
+- **Pipeline:**
+  1. Inicializa o upload via `POST /rest/images?action=initializeUpload`.
+  2. Envia o buffer binário via `PUT <uploadUrl>` com o Content-Type correspondente.
+  3. Vincula o `urn:li:image:...` no post via `content.media`.
+
+### 2. Suporte a Documentos e Carrosséis em PDF
+- **Formato:** `.pdf`.
+- **Como funciona no LinkedIn:** Arquivos PDF anexados a publicações são renderizados nativamente pelo LinkedIn como **Carrosséis deslizáveis**, proporcionando alta retenção e engajamento.
+- **Pipeline:**
+  1. Inicializa o upload via `POST /rest/documents?action=initializeUpload`.
+  2. Envia o arquivo binário via `PUT <uploadUrl>` com `Content-Type: application/pdf`.
+  3. Vincula o `urn:li:document:...` no post via `content.media`.
+
+### 3. Exemplo de Post com Carrossel em PDF
+```markdown
+---
+title: "Guia Rápido: Boas Práticas de Engenharia"
+tags:
+  - engineering
+  - architecture
+media: "assets/sample-carousel.pdf"
+canonical_url: "https://github.com/Guimathis/LinkedOps"
+visibility: "PUBLIC"
+---
+
+Carrosséis em PDF são ideais para tutoriais técnicos e guias visuais passo a passo! 📑
+Confira o material completo no carrossel acima.
+```
+
+
 
