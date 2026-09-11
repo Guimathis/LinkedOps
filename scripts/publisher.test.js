@@ -75,7 +75,7 @@ test('calculateContentHash gera SHA-256 consistente', () => {
 });
 
 test('processPostFile executa com sucesso em modo dry-run', async () => {
-  const samplePath = path.join(PROJECT_ROOT, 'posts', 'queue', '2026-09-15-query-opt.md');
+  const samplePath = path.join(PROJECT_ROOT, 'posts', 'drafts', '2026-09-exemplo.md');
   const res = await processPostFile(samplePath, { isDryRun: true });
   assert.strictEqual(res.success, true);
   assert.strictEqual(res.dryRun, true);
