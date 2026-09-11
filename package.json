@@ -1,6 +1,6 @@
 {
   "name": "linkedops",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Content as Code (GitOps) para automação de publicações no LinkedIn via Git",
   "type": "module",
   "scripts": {
