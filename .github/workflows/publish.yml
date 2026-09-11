@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   publish:
@@ -19,6 +19,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -34,3 +36,16 @@ jobs:
           LINKEDIN_AUTHOR_URN: ${{ secrets.LINKEDIN_AUTHOR_URN }}
           LINKEDIN_VERSION: ${{ secrets.LINKEDIN_VERSION || '202608' }}
         run: node scripts/publisher.js
+
+      - name: Commit and Push Lifecycle Changes
+        if: success()
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add posts/ history.json
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(bot): archive published posts and update history [skip ci]"
+            git push origin main
+          else
+            echo "Nenhuma alteração pendente para arquivamento."
+          fi

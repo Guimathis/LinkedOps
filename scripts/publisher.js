@@ -149,10 +149,92 @@ export function formatContent(metadata, body) {
 }
 
 /**
+ * Injeta ou atualiza campos no cabeçalho YAML Frontmatter
+ */
+export function injectFrontmatterMetadata(rawContent, fieldsToInject) {
+  const match = rawContent.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
+  if (!match) {
+    throw new Error("Delimitadores de Frontmatter ('---') não encontrados para injeção.");
+  }
+
+  let frontmatter = match[1];
+  const body = match[2];
+
+  for (const [key, value] of Object.entries(fieldsToInject)) {
+    const keyRegex = new RegExp(`^${key}:.*$`, 'm');
+    const formattedValue = typeof value === 'string' ? `"${value}"` : value;
+    if (keyRegex.test(frontmatter)) {
+      frontmatter = frontmatter.replace(keyRegex, `${key}: ${formattedValue}`);
+    } else {
+      frontmatter = `${frontmatter.trimEnd()}\n${key}: ${formattedValue}`;
+    }
+  }
+
+  return `---\n${frontmatter.trim()}\n---\n\n${body.trim()}\n`;
+}
+
+/**
+ * Move o arquivo publicado para posts/published/, enriquece o Frontmatter e grava no history.json
+ */
+export function archivePublishedPost(filePath, { postUrn, metadata, contentHash, publishedAt = new Date().toISOString() }) {
+  const resolvedPath = path.resolve(process.cwd(), filePath);
+  const fileName = path.basename(resolvedPath);
+  const publishedDir = path.join(PROJECT_ROOT, 'posts', 'published');
+
+  if (!fs.existsSync(publishedDir)) {
+    fs.mkdirSync(publishedDir, { recursive: true });
+  }
+
+  const destinationPath = path.join(publishedDir, fileName);
+  const rawContent = fs.readFileSync(resolvedPath, 'utf8');
+
+  // Injeta metadados de publicação no frontmatter
+  const enrichedContent = injectFrontmatterMetadata(rawContent, {
+    published_at: publishedAt,
+    linkedin_post_urn: postUrn
+  });
+
+  // Grava o arquivo com metadados em posts/published/
+  fs.writeFileSync(destinationPath, enrichedContent, 'utf8');
+
+  // Se o arquivo original estava em outra pasta (ex: posts/queue/), remove da fila
+  if (resolvedPath !== destinationPath && fs.existsSync(resolvedPath)) {
+    fs.unlinkSync(resolvedPath);
+  }
+
+  // Atualiza history.json
+  const historyPath = path.join(PROJECT_ROOT, 'history.json');
+  let history = [];
+  if (fs.existsSync(historyPath)) {
+    try {
+      history = JSON.parse(fs.readFileSync(historyPath, 'utf8'));
+      if (!Array.isArray(history)) history = [];
+    } catch {
+      history = [];
+    }
+  }
+
+  const alreadyLogged = history.some(item => item.linkedin_urn === postUrn || item.content_hash === contentHash);
+  if (!alreadyLogged) {
+    history.push({
+      file_path: path.relative(PROJECT_ROOT, destinationPath).replace(/\\/g, '/'),
+      title: metadata.title,
+      content_hash: contentHash,
+      linkedin_urn: postUrn,
+      published_at: publishedAt,
+      media_attached: Boolean(metadata.media)
+    });
+    fs.writeFileSync(historyPath, JSON.stringify(history, null, 2) + '\n', 'utf8');
+  }
+
+  return destinationPath;
+}
+
+/**
  * Validação de integridade e idempotência
  */
-export function validatePost(filePath, metadata) {
-  // Checagem de post já publicado
+export function validatePost(filePath, metadata, contentHash = null) {
+  // 1. Checagem de post já publicado no próprio arquivo
   if (metadata.linkedin_post_urn) {
     return {
       isValid: false,
@@ -160,7 +242,28 @@ export function validatePost(filePath, metadata) {
     };
   }
 
-  // Checagem de existência física de mídia
+  // 2. Checagem de idempotência no histórico history.json
+  if (contentHash) {
+    const historyPath = path.join(PROJECT_ROOT, 'history.json');
+    if (fs.existsSync(historyPath)) {
+      try {
+        const history = JSON.parse(fs.readFileSync(historyPath, 'utf8'));
+        if (Array.isArray(history)) {
+          const match = history.find(item => item.content_hash === contentHash);
+          if (match) {
+            return {
+              isValid: false,
+              reason: `Conteúdo já foi publicado anteriormente (${match.linkedin_urn} em ${match.published_at}). Ignorando por idempotência.`
+            };
+          }
+        }
+      } catch {
+        // Ignora falha de leitura em validação não-crítica
+      }
+    }
+  }
+
+  // 3. Checagem de existência física de mídia
   if (metadata.media) {
     const mediaPath = path.resolve(PROJECT_ROOT, metadata.media);
     if (!fs.existsSync(mediaPath)) {
@@ -257,14 +360,14 @@ export async function processPostFile(filePath, { isDryRun = false } = {}) {
   const rawContent = fs.readFileSync(resolvedPath, 'utf8');
   const { metadata, body } = parseFrontmatter(rawContent);
 
-  const validation = validatePost(resolvedPath, metadata);
+  const formatted = formatContent(metadata, body);
+  const hash = calculateContentHash(formatted.commentary);
+
+  const validation = validatePost(resolvedPath, metadata, hash);
   if (!validation.isValid) {
     console.warn(`⚠️  [AVISO] ${validation.reason}`);
     return { skipped: true, reason: validation.reason };
   }
-
-  const formatted = formatContent(metadata, body);
-  const hash = calculateContentHash(formatted.commentary);
 
   console.log(`📌 Título: "${formatted.title}"`);
   console.log(`🔒 Visibilidade: ${formatted.visibility}`);
@@ -285,7 +388,17 @@ export async function processPostFile(filePath, { isDryRun = false } = {}) {
   console.log('\n🚀 Publicando no LinkedIn...');
   const result = await publishToLinkedIn(formatted);
   console.log(`🎉 Sucesso! Post publicado com URN: ${result.postUrn}`);
-  return { success: true, postUrn: result.postUrn, metadata, formatted };
+
+  // Ciclo de vida automático (Fase 3): enriquece frontmatter, move arquivo e atualiza history.json
+  const archivedPath = archivePublishedPost(resolvedPath, {
+    postUrn: result.postUrn,
+    metadata,
+    contentHash: hash
+  });
+  console.log(`📦 Post arquivado com sucesso em: ${path.relative(PROJECT_ROOT, archivedPath)}`);
+  console.log(`📝 Log de publicação registrado em history.json\n`);
+
+  return { success: true, postUrn: result.postUrn, archivedPath, metadata, formatted };
 }
 
 /**

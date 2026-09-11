@@ -13,6 +13,7 @@ import argparse
 from pathlib import Path
 import urllib.request
 import urllib.error
+from datetime import datetime, timezone
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -115,11 +116,93 @@ def format_content(metadata: dict, body: str):
         "char_count": char_count
     }
 
-def validate_post(file_path: Path, metadata: dict):
-    """Valida duplicatas e integridade dos assets."""
+def inject_frontmatter_metadata(raw_content: str, fields: dict) -> str:
+    """Injeta ou substitui metadados no bloco YAML Frontmatter."""
+    match = re.match(r"^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$", raw_content)
+    if not match:
+        raise ValueError("Delimitadores de Frontmatter ('---') não encontrados para injeção.")
+
+    frontmatter, body = match.group(1), match.group(2)
+    for key, val in fields.items():
+        formatted_val = f'"{val}"' if isinstance(val, str) else str(val)
+        pattern = re.compile(rf"^{key}:.*$", re.MULTILINE)
+        if pattern.search(frontmatter):
+            frontmatter = pattern.sub(f"{key}: {formatted_val}", frontmatter)
+        else:
+            frontmatter = f"{frontmatter.rstrip()}\n{key}: {formatted_val}"
+
+    return f"---\n{frontmatter.strip()}\n---\n\n{body.strip()}\n"
+
+def archive_published_post(file_path: Path, post_urn: str, metadata: dict, content_hash: str, published_at: str = None) -> Path:
+    """Move arquivo para posts/published/, atualiza frontmatter e history.json."""
+    if published_at is None:
+        published_at = datetime.now(timezone.utc).isoformat()
+
+    resolved_path = file_path.resolve()
+    published_dir = PROJECT_ROOT / "posts" / "published"
+    published_dir.mkdir(parents=True, exist_ok=True)
+
+    destination_path = published_dir / resolved_path.name
+    with open(resolved_path, "r", encoding="utf-8") as f:
+        raw_content = f.read()
+
+    enriched = inject_frontmatter_metadata(raw_content, {
+        "published_at": published_at,
+        "linkedin_post_urn": post_urn
+    })
+
+    with open(destination_path, "w", encoding="utf-8") as f:
+        f.write(enriched)
+
+    if resolved_path != destination_path and resolved_path.exists():
+        resolved_path.unlink()
+
+    # Atualiza history.json
+    history_path = PROJECT_ROOT / "history.json"
+    history = []
+    if history_path.exists():
+        try:
+            with open(history_path, "r", encoding="utf-8") as f:
+                history = json.load(f)
+            if not isinstance(history, list):
+                history = []
+        except Exception:
+            history = []
+
+    already_logged = any(item.get("linkedin_urn") == post_urn or item.get("content_hash") == content_hash for item in history)
+    if not already_logged:
+        history.append({
+            "file_path": str(destination_path.relative_to(PROJECT_ROOT)).replace("\\", "/"),
+            "title": metadata.get("title"),
+            "content_hash": content_hash,
+            "linkedin_urn": post_urn,
+            "published_at": published_at,
+            "media_attached": bool(metadata.get("media"))
+        })
+        with open(history_path, "w", encoding="utf-8") as f:
+            json.dump(history, f, indent=2, ensure_ascii=False)
+            f.write("\n")
+
+    return destination_path
+
+def validate_post(file_path: Path, metadata: dict, content_hash: str = None):
+    """Valida duplicatas, histórico de publicação e integridade dos assets."""
     urn = metadata.get("linkedin_post_urn")
     if urn:
         return False, f"Arquivo já possui 'linkedin_post_urn' ({urn}). Ignorando para evitar duplicatas."
+
+    if content_hash:
+        history_path = PROJECT_ROOT / "history.json"
+        if history_path.exists():
+            try:
+                with open(history_path, "r", encoding="utf-8") as f:
+                    history = json.load(f)
+                if isinstance(history, list):
+                    for item in history:
+                        if item.get("content_hash") == content_hash:
+                            return False, f"Conteúdo já publicado anteriormente ({item.get('linkedin_urn')}). Ignorando por idempotência."
+            except Exception:
+                pass
 
     media = metadata.get("media")
     if media:
@@ -200,13 +283,13 @@ def process_post_file(file_path: Path, is_dry_run: bool = False):
         content = f.read()
 
     metadata, body = parse_frontmatter(content)
-    is_valid, reason = validate_post(resolved_path, metadata)
+    formatted = format_content(metadata, body)
+    content_hash = calculate_content_hash(formatted["commentary"])
+
+    is_valid, reason = validate_post(resolved_path, metadata, content_hash)
     if not is_valid:
         print(f"⚠️  [AVISO] {reason}")
         return {"skipped": True, "reason": reason}
-
-    formatted = format_content(metadata, body)
-    content_hash = calculate_content_hash(formatted["commentary"])
 
     print(f"📌 Título: \"{formatted['title']}\"")
     print(f"🔒 Visibilidade: {formatted['visibility']}")
@@ -225,7 +308,13 @@ def process_post_file(file_path: Path, is_dry_run: bool = False):
     print("\n🚀 Publicando no LinkedIn...")
     urn = publish_to_linkedin(formatted)
     print(f"🎉 Sucesso! Post publicado com URN: {urn}")
-    return {"success": True, "urn": urn}
+
+    # Ciclo de vida automático (Fase 3): enriquece frontmatter, move arquivo e atualiza history.json
+    archived_path = archive_published_post(resolved_path, urn, metadata, content_hash)
+    print(f"📦 Post arquivado com sucesso em: {archived_path.relative_to(PROJECT_ROOT)}")
+    print("📝 Log de publicação registrado em history.json\n")
+
+    return {"success": True, "urn": urn, "archived_path": archived_path}
 
 def main():
     parser = argparse.ArgumentParser(description="LinkedIn Content as Code Publisher")

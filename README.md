@@ -121,3 +121,28 @@ Para que a Action publique no seu perfil:
 Você também pode disparar a publicação manualmente a qualquer momento pela interface do GitHub:
 - Vá na aba **Actions** > selecione **LinkedIn Content as Code — Publish Pipeline** > clique em **Run workflow**.
 
+---
+
+## 🔄 Ciclo de Vida Automático & Idempotência (Fase 3: GitOps Bot)
+
+Na Fase 3, o pipeline atua de forma totalmente autônoma para gerenciar o estado dos posts:
+
+### 1. O que acontece após a publicação bem-sucedida?
+1. **Enriquecimento de Metadados:**  
+   O arquivo Markdown recebe automaticamente os campos no Frontmatter:
+   ```yaml
+   published_at: "2026-09-11T13:45:00.000Z"
+   linkedin_post_urn: "urn:li:share:7123456789012345678"
+   ```
+2. **Arquivamento Atômico:**  
+   O arquivo é removido de `posts/queue/` e transferido para `posts/published/`.
+3. **Log Histórico (`history.json`):**  
+   Um registro com `file_path`, `title`, `content_hash` (SHA-256), `linkedin_urn` e `published_at` é gravado no índice histórico.
+4. **Git Commit Automático:**  
+   O bot do GitHub Actions faz commit e push das alterações para a branch `main` usando a tag `[skip ci]`, garantindo que o ciclo se encerre sem disparar loops infinitos de CI.
+
+### 2. Prevenção de Duplicatas (Idempotência Dupla)
+- **Nível 1 (Arquivo):** Se um arquivo já possuir `linkedin_post_urn`, o pipeline ignora a publicação e registra um aviso.
+- **Nível 2 (Histórico):** Se o hash SHA-256 do texto já constar em `history.json`, o pipeline aborta a publicação para evitar duplicatas, mesmo que o arquivo seja renomeado.
+
+

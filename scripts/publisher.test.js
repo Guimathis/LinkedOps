@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseFrontmatter, formatContent, validatePost, calculateContentHash, processPostFile } from './publisher.js';
+import { parseFrontmatter, formatContent, validatePost, calculateContentHash, processPostFile, injectFrontmatterMetadata } from './publisher.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -79,4 +79,24 @@ test('processPostFile executa com sucesso em modo dry-run', async () => {
   const res = await processPostFile(samplePath, { isDryRun: true });
   assert.strictEqual(res.success, true);
   assert.strictEqual(res.dryRun, true);
+});
+
+test('injectFrontmatterMetadata adiciona novos campos e preserva corpo', () => {
+  const sample = `---
+title: "Post de Teste"
+tags:
+  - java
+---
+
+Corpo do artigo aqui.`;
+
+  const enriched = injectFrontmatterMetadata(sample, {
+    published_at: '2026-09-11T12:00:00Z',
+    linkedin_post_urn: 'urn:li:share:987654321'
+  });
+
+  assert.ok(enriched.includes('published_at: "2026-09-11T12:00:00Z"'));
+  assert.ok(enriched.includes('linkedin_post_urn: "urn:li:share:987654321"'));
+  assert.ok(enriched.includes('Corpo do artigo aqui.'));
+  assert.ok(enriched.startsWith('---\n'));
 });
