@@ -6,5 +6,13 @@
     "linkedin_urn": "urn:li:share:7504169897627803648",
     "published_at": "2026-09-11T13:32:04.533Z",
     "media_attached": true
+  },
+  {
+    "file_path": "posts/published/2026-09-exemplo-carrossel.md",
+    "title": "Guia Rápido: Boas Práticas de Engenharia de Software",
+    "content_hash": "a86266b139e87f04b55f141cd7b95cc8a138e3741f138a1e81a07b7a6075fecd",
+    "linkedin_urn": "urn:li:ugcPost:7504236439950434305",
+    "published_at": "2026-09-11T17:56:29.696Z",
+    "media_attached": true
   }
 ]

@@ -8,6 +8,8 @@ tags:
 media: "assets/sample-carousel.pdf"
 canonical_url: "https://github.com/Guimathis/LinkedOps"
 visibility: "PUBLIC"
+published_at: "2026-09-11T17:56:29.696Z"
+linkedin_post_urn: "urn:li:ugcPost:7504236439950434305"
 ---
 
 Você sabia que posts em formato de documento geram uma das maiores taxas de leitura e salvamento no LinkedIn? 📑
