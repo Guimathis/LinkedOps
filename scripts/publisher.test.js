@@ -75,7 +75,7 @@ test('calculateContentHash gera SHA-256 consistente', () => {
 });
 
 test('processPostFile executa com sucesso em modo dry-run', async () => {
-  const samplePath = path.join(PROJECT_ROOT, 'posts', 'drafts', '2026-09-exemplo.md');
+  const samplePath = path.join(PROJECT_ROOT, 'tests', 'fixtures', 'test-post.md');
   const res = await processPostFile(samplePath, { isDryRun: true });
   assert.strictEqual(res.success, true);
   assert.strictEqual(res.dryRun, true);
@@ -112,7 +112,7 @@ test('getMimeType identifica tipos MIME de imagens e PDFs corretamente', () => {
 });
 
 test('processPostFile com mídia em PDF executa dry-run com anexo simulado', async () => {
-  const samplePdfPost = path.join(PROJECT_ROOT, 'posts', 'drafts', '2026-09-exemplo-carrossel.md');
+  const samplePdfPost = path.join(PROJECT_ROOT, 'tests', 'fixtures', 'test-carousel.md');
   const res = await processPostFile(samplePdfPost, { isDryRun: true });
   assert.strictEqual(res.success, true);
   assert.strictEqual(res.dryRun, true);
