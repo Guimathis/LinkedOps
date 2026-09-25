@@ -8,6 +8,8 @@ tags:
   - databases
 media: "assets/2026-09-24-hibernate-envers/diagram.png"
 visibility: "PUBLIC"
+published_at: "2026-09-25T00:50:47.348Z"
+linkedin_post_urn: "urn:li:share:7509051741863301120"
 ---
 
 Até pouco tempo atrás, eu nunca tinha ouvido falar no Hibernate Envers. 🔍

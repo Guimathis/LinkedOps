@@ -14,5 +14,13 @@
     "linkedin_urn": "urn:li:ugcPost:7504236439950434305",
     "published_at": "2026-09-11T17:56:29.696Z",
     "media_attached": true
+  },
+  {
+    "file_path": "posts/published/2026-09-24-hibernate-envers.md",
+    "title": "Hibernate Envers: Auditoria e Versionamento de Entidades JPA",
+    "content_hash": "7dde9967ec88e9f6407edf5ea42dc36e93edd4276a229751f8d784bae4598c29",
+    "linkedin_urn": "urn:li:share:7509051741863301120",
+    "published_at": "2026-09-25T00:50:47.348Z",
+    "media_attached": true
   }
 ]
