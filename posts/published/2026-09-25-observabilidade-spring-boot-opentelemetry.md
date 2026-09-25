@@ -8,6 +8,8 @@ tags:
   - GrafanaTempo
 media: "assets/2026-09-25-observabilidade/carrossel-observabilidade.pdf"
 visibility: "PUBLIC"
+published_at: "2026-09-25T19:42:53.346Z"
+linkedin_post_urn: "urn:li:ugcPost:7509336645918228480"
 ---
 
 Implementando a tríade de Observabilidade em Microsserviços com Spring Boot e OpenTelemetry:
