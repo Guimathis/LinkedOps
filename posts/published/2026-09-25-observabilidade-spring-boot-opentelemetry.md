@@ -8,6 +8,8 @@ tags:
   - GrafanaTempo
 media: "assets/2026-09-25-observabilidade/carrossel-observabilidade.pdf"
 visibility: "PUBLIC"
+published_at: "2026-09-25T19:35:07.844Z"
+linkedin_post_urn: "urn:li:ugcPost:7509334693394341891"
 ---
 
 Implementando a tríade de Observabilidade em Microsserviços com Spring Boot e OpenTelemetry:
@@ -27,5 +29,3 @@ Para validar a resiliência, rodei um teste de carga com o Postman:
 
 
 Ter essa correlação direta entre logs, métricas e traces faz toda a diferença para investigar gargalos e falhas com rapidez.
-
-

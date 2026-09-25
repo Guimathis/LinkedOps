@@ -22,5 +22,13 @@
     "linkedin_urn": "urn:li:share:7509051741863301120",
     "published_at": "2026-09-25T00:50:47.348Z",
     "media_attached": true
+  },
+  {
+    "file_path": "posts/published/2026-09-25-observabilidade-spring-boot-opentelemetry.md",
+    "title": "Implementando a tríade de Observabilidade em Microsserviços com Spring Boot e OpenTelemetry",
+    "content_hash": "f7343087ad2a09b26f67d9d6678c2c60f4ffb0f3c9ac85a1125d16c900b0d81b",
+    "linkedin_urn": "urn:li:ugcPost:7509334693394341891",
+    "published_at": "2026-09-25T19:35:07.844Z",
+    "media_attached": true
   }
 ]
