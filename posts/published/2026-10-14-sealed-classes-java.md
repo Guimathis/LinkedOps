@@ -8,6 +8,8 @@ tags:
   - cleanarchitecture
 media: "assets/2026-10-14-sealed-classes-java/diagram.png"
 visibility: "PUBLIC"
+published_at: "2026-10-14T22:47:19.283Z"
+linkedin_post_urn: "urn:li:share:7516268429029482497"
 ---
 
 As Sealed Classes foram oficializadas no Java 17, mas você já reparou como quase ninguém usa esse recurso no dia a dia? 🔒
