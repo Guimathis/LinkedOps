@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseFrontmatter, formatContent, validatePost, calculateContentHash, processPostFile, injectFrontmatterMetadata, getMimeType } from './publisher.js';
+import { parseFrontmatter, formatContent, validatePost, calculateContentHash, processPostFile, injectFrontmatterMetadata, getMimeType, escapeLittleText } from './publisher.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -116,4 +116,30 @@ test('processPostFile com mídia em PDF executa dry-run com anexo simulado', asy
   const res = await processPostFile(samplePdfPost, { isDryRun: true });
   assert.strictEqual(res.success, true);
   assert.strictEqual(res.dryRun, true);
+});
+
+test('escapeLittleText escapa parênteses e caracteres reservados preservando hashtags', () => {
+  const input = 'Variantes incompatíveis (como Pix, Boleto e Cartão). (final) (sealed)\n@Audited _AUD updated_at C# item #1 [teste] {bloco} <tags> *bold* ~tilde~ | pipe';
+  const escaped = escapeLittleText(input + '\n\n#java #backend #clean_architecture');
+
+  // Parênteses devem ser escapados
+  assert.ok(escaped.includes('\\(como Pix, Boleto e Cartão\\)'));
+  assert.ok(escaped.includes('\\(final\\)'));
+  assert.ok(escaped.includes('\\(sealed\\)'));
+
+  // Caracteres especiais escapados
+  assert.ok(escaped.includes('\\@Audited'));
+  assert.ok(escaped.includes('\\_AUD'));
+  assert.ok(escaped.includes('updated\\_at'));
+  assert.ok(escaped.includes('C\\#'));
+  assert.ok(escaped.includes('item \\#1'));
+  assert.ok(escaped.includes('\\[teste\\]'));
+  assert.ok(escaped.includes('\\{bloco\\}'));
+  assert.ok(escaped.includes('\\<tags\\>'));
+  assert.ok(escaped.includes('\\*bold\\*'));
+  assert.ok(escaped.includes('\\~tilde\\~'));
+  assert.ok(escaped.includes('\\| pipe'));
+
+  // Hashtags válidas mantidas intactas
+  assert.ok(escaped.includes('#java #backend #clean_architecture'));
 });

@@ -308,6 +308,26 @@ def upload_media_to_linkedin(media_relative_path: str) -> dict:
     print(f"✅ Upload concluído! URN da mídia: {media_urn}")
     return {"media_urn": media_urn, "is_document": is_document, "mime_type": mime_type}
 
+def escape_little_text(text: str) -> str:
+    """Escapa caracteres reservados pelo Little Text Format do LinkedIn mantendo hashtags válidas."""
+    if not text or not isinstance(text, str):
+        return text
+
+    hashtag_regex = re.compile(r"(#[a-zA-Z\u00C0-\u017F][a-zA-Z0-9_\u00C0-\u017F]*)")
+    parts = hashtag_regex.split(text)
+
+    escaped_parts = []
+    for idx, part in enumerate(parts):
+        if idx % 2 == 1:
+            escaped_parts.append(part)
+        else:
+            p = part.replace("\\", "\\\\")
+            p = re.sub(r"([|{}[\]()<>\*~_@])", r"\\\1", p)
+            p = re.sub(r"#(?![a-zA-Z\u00C0-\u017F])", r"\\#", p)
+            escaped_parts.append(p)
+
+    return "".join(escaped_parts)
+
 def publish_to_linkedin(formatted: dict):
     """Dispara a publicação via LinkedIn REST API com suporte a imagens e PDF."""
     token = os.environ.get("LINKEDIN_ACCESS_TOKEN")
@@ -326,7 +346,7 @@ def publish_to_linkedin(formatted: dict):
     api_version = os.environ.get("LINKEDIN_VERSION", "202608")
     payload = {
         "author": author_urn,
-        "commentary": formatted["commentary"],
+        "commentary": escape_little_text(formatted["commentary"]),
         "visibility": "CONNECTIONS" if formatted["visibility"] == "CONNECTIONS" else "PUBLIC",
         "distribution": {
             "feedDistribution": "MAIN_FEED",

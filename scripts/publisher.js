@@ -376,6 +376,32 @@ export async function uploadMediaToLinkedIn(mediaRelativePath) {
 }
 
 /**
+ * Escapa caracteres reservados pelo Little Text Format do LinkedIn
+ * para evitar truncamento silencioso da publicação na API /rest/posts.
+ * Caracteres reservados: \ | { } @ [ ] ( ) < > # * _ ~
+ * Preserva hashtags válidas (ex: #java, #backend).
+ */
+export function escapeLittleText(text) {
+  if (!text || typeof text !== 'string') return text;
+
+  // Hashtags válidas começam com letra e podem conter letras, números e underlines.
+  const hashtagRegex = /(#[a-zA-Z\u00C0-\u017F][a-zA-Z0-9_\u00C0-\u017F]*)/g;
+  const parts = text.split(hashtagRegex);
+
+  return parts
+    .map((part, index) => {
+      if (index % 2 === 1) {
+        return part;
+      }
+      return part
+        .replace(/\\/g, '\\\\')
+        .replace(/([|{}[\]()<>\*~_@])/g, '\\$1')
+        .replace(/#(?![a-zA-Z\u00C0-\u017F])/g, '\\#');
+    })
+    .join('');
+}
+
+/**
  * Publica post via LinkedIn REST API (com suporte a texto puro, imagens e documentos PDF)
  */
 export async function publishToLinkedIn({ title, commentary, visibility, media = null }) {
@@ -397,7 +423,7 @@ export async function publishToLinkedIn({ title, commentary, visibility, media =
   const endpoint = 'https://api.linkedin.com/rest/posts';
   const payload = {
     author: authorUrn,
-    commentary: commentary,
+    commentary: escapeLittleText(commentary),
     visibility: visibility === 'CONNECTIONS' ? 'CONNECTIONS' : 'PUBLIC',
     distribution: {
       feedDistribution: 'MAIN_FEED',
