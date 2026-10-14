@@ -30,5 +30,13 @@
     "linkedin_urn": "urn:li:ugcPost:7509336645918228480",
     "published_at": "2026-09-25T19:42:53.346Z",
     "media_attached": true
+  },
+  {
+    "file_path": "posts/published/2026-10-14-sealed-classes-java.md",
+    "title": "Sealed Classes no Java: Modelagem Fechada e Segurança no Compilador",
+    "content_hash": "eac4cfa02a91362376994079a29014ab8bfe16b57dd02f2ed6a3e13e9cf40fbe",
+    "linkedin_urn": "urn:li:share:7516274186718257152",
+    "published_at": "2026-10-14T23:10:12.065Z",
+    "media_attached": true
   }
 ]
